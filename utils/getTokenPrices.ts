@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-async function getTokenPrices(tokens: { mint: string; amount: number }[]) {
+async function getTokenPrices(tokens: { mint: string; name: string; logoURI: string; amount: number }[]) : Promise<{ mint: string; name: string; logoURI: string; amount: number; priceInUSD: number; totalValueInUSD: number }[]> {
     try {
         // Extract mint addresses directly inside this function
         const tokenMints = tokens.map((token) => token.mint).join(','); // Join mints by comma
