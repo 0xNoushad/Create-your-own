@@ -1,32 +1,62 @@
-import axios from 'axios';
+// utils/getTokenPrices.ts
+import axios from "axios";
+import type { TokenAccount } from "./getUserTokens";
 
-async function getTokenPrices(tokens: { mint: string; name: string; logoURI: string; amount: number }[]) : Promise<{ mint: string; name: string; logoURI: string; amount: number; priceInUSD: number; totalValueInUSD: number }[]> {
-    try {
-        // Extract mint addresses directly inside this function
-        const tokenMints = tokens.map((token) => token.mint).join(','); // Join mints by comma
+interface TokenInfo {
+  mint: string;
+  name: string;
+  symbol: string;
+  logoURI: string;
+  price: number;
+}
 
-        // Fetch prices from Jupiter Price API for these token mints (vsToken is USDC by default)
-        const response = await axios.get(`https://price.jup.ag/v6/price?ids=${tokenMints}&vsToken=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`);
+async function getTokenPrices(tokens: TokenAccount[]) {
+  try {
+    // Fetch token list from Jupiter API
+    const response = await axios.get("https://token.jup.ag/all");
+    const tokenList = response.data;
+    
+    // Create a map of token info by mint address
+    const tokenInfoMap = new Map<string, TokenInfo>();
+    tokenList.forEach((token: any) => {
+      tokenInfoMap.set(token.address, {
+        mint: token.address,
+        name: token.name,
+        symbol: token.symbol,
+        logoURI: token.logoURI,
+        price: token.price || 0,
+      });
+    });
 
-        const priceData = response.data.data;
+    // Combine token balances with prices and info
+    return tokens.map((token) => {
+      const tokenInfo = tokenInfoMap.get(token.mint);
+      if (!tokenInfo) {
+        return {
+          mint: token.mint,
+          name: "Unknown Token",
+          symbol: "???",
+          logoURI: "/default-token.png",
+          amount: token.amount,
+          priceInUSD: 0,
+          totalValueInUSD: 0,
+        };
+      }
 
-        if (!priceData) {
-            throw new Error('Invalid response from Jupiter API');
-        }
-
-        // Map each token to its corresponding price and total value in USD
-        return tokens.map((token) => {
-            const price = priceData[token.mint]?.price || 0; // Safely handle missing prices
-            return {
-                ...token,
-                priceInUSD: price,
-                totalValueInUSD: token.amount * price, // Calculate total value in USD
-            };
-        });
-    } catch (error) {
-        console.error('Error fetching token prices:', error);
-        throw error;
-    }
+      return {
+        mint: token.mint,
+        name: tokenInfo.name,
+        symbol: tokenInfo.symbol,
+        logoURI: tokenInfo.logoURI,
+        amount: token.amount,
+        priceInUSD: tokenInfo.price,
+        totalValueInUSD: token.amount * tokenInfo.price,
+      };
+    });
+  } catch (error) {
+    console.error("Error fetching token prices:", error);
+    throw error;
+  }
 }
 
 export default getTokenPrices;

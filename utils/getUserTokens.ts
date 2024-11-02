@@ -1,41 +1,49 @@
-import axios from 'axios';
+// utils/getUserTokens.ts
+import { Connection, PublicKey } from "@solana/web3.js";
+import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
-const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL!;
+export interface TokenAccount {
+  mint: string;
+  amount: number;
+  decimals: number;
+}
 
-async function getUserTokens(walletAddress: string): Promise<{ mint: string; name: string; logoURI: string; amount: number }[]> {
-  const body = {
-    jsonrpc: '2.0',
-    id: 'fetch-solana-assets',
-    method: 'searchAssets',
-    params: {
-      ownerAddress: walletAddress,
-      tokenType: 'all',
-      displayOptions: {
-        showNativeBalance: false, // Exclude SOL
-        showCollectionMetadata: false,
-      },
-    },
-  };
-
+async function getUserTokens(walletAddress: string) {
   try {
-    const response = await axios.post(RPC_URL, body);
+    // Use the mainnet RPC endpoint
+    const connection = new Connection(
+      process.env.NEXT_PUBLIC_RPC_URL || "https://api.mainnet-beta.solana.com",
+      "confirmed"
+    );
 
-    if (!response.data || !response.data.result) {
-      throw new Error('Failed to fetch assets');
-    }
+    // Get all token accounts for the wallet
+    const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+      new PublicKey(walletAddress),
+      {
+        programId: TOKEN_PROGRAM_ID,
+      }
+    );
 
-    const tokens = response.data.result.items
-      .filter((item: any) => item.interface === 'FungibleToken' || item.interface === 'FungibleAsset')
-      .map((token: any) => ({
-        mint: token.id,
-        name: token.token_info.symbol || token.content.metadata.symbol || 'Unknown',
-        logoURI: token.content.links.image || '',
-        amount: token.token_info.balance / Math.pow(10, token.token_info.decimals),
-      }));
+    // Filter and format token accounts
+    const tokens = tokenAccounts.value
+      .map((tokenAccount) => {
+        const accountData = tokenAccount.account.data.parsed.info;
+        const amount = accountData.tokenAmount.uiAmount;
+        
+        // Filter out accounts with zero balance
+        if (amount === 0) return null;
+
+        return {
+          mint: accountData.mint,
+          amount: amount,
+          decimals: accountData.tokenAmount.decimals,
+        };
+      })
+      .filter((token): token is TokenAccount => token !== null);
 
     return tokens;
   } catch (error) {
-    console.error('Error fetching Solana tokens:', error);
+    console.error("Error fetching user tokens:", error);
     throw error;
   }
 }
